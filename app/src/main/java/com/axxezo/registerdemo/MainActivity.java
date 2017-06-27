@@ -7,6 +7,8 @@ import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.device.ScanManager;
+import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.support.design.widget.FloatingActionButton;
@@ -31,6 +33,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+import java.util.List;
 
 
 public class MainActivity extends AppCompatActivity
@@ -43,6 +46,7 @@ public class MainActivity extends AppCompatActivity
     private Vibrator mVibrator;
     private ScanManager mScanManager;
     private final static String SCAN_ACTION = "urovo.rcv.message";
+    private final static String baseUrl = "http://192.168.1.108:3000/api/";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -159,7 +163,7 @@ public class MainActivity extends AppCompatActivity
                         // Remove DV.
                         barcodeStr = barcodeStr.substring(0, barcodeStr.indexOf("-") + 2);
                         editText_dni.setText(barcodeStr.trim());
-                        db.insert("insert into records(person_document,datetime) values('"+barcodeStr.trim()+"','"+getCurrentDateTime("yyyy-MM-dd HH:mm:ss")+"')");
+                        db.insert("insert into registers (person, date, pda, sync) values ('"+barcodeStr.trim()+"',"+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
 
                     } else
                         editText_dni.setError("cedula o pasaporte incorrecto, verifique");
@@ -173,7 +177,7 @@ public class MainActivity extends AppCompatActivity
                         barcodeStr = rutValidator;
                         rutValidator = rutValidator.substring(0, rutValidator.length() - 1) + "-" + rutValidator.substring(rutValidator.length() - 1);
                         editText_dni.setText(rutValidator);
-                        db.insert("insert into records(person_document,datetime) values('"+barcodeStr.trim()+"','"+getCurrentDateTime("yyyy-MM-dd HH:mm:ss")+"')");
+                        db.insert("insert into registers (person, date, pda, sync) values ('"+barcodeStr.trim()+"',"+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
                     } else { //try validate rut size below 10.000.000
                         rutValidator = barcodeStr.substring(0, 8);
                         rutValidator = rutValidator.replace(" ", "");
@@ -182,7 +186,7 @@ public class MainActivity extends AppCompatActivity
                             barcodeStr = rutValidator;
                             rutValidator = rutValidator.substring(0, rutValidator.length() - 1) + "-" + rutValidator.substring(rutValidator.length() - 1);
                             editText_dni.setText(rutValidator);
-                            db.insert("insert into records(person_document,datetime) values('"+rutValidator.trim()+"','"+getCurrentDateTime("yyyy-MM-dd HH:mm:ss")+"')");
+                            db.insert("insert into registers (person, date, pda, sync) values ('"+rutValidator.trim()+"',"+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
                         } else {
                             // log.writeLog(getApplicationContext(), "Main:line 412", "ERROR", "rut invalido " + barcodeStr);
                             barcodeStr = "";
@@ -232,8 +236,9 @@ public class MainActivity extends AppCompatActivity
             }
 
         } catch (java.lang.NumberFormatException e) {
-
+            e.printStackTrace();
         } catch (Exception e) {
+            e.printStackTrace();
         }
         return validacion;
     }
@@ -261,6 +266,7 @@ public class MainActivity extends AppCompatActivity
         IntentFilter filter = new IntentFilter();
         filter.addAction(SCAN_ACTION);
         registerReceiver(mScanReceiver, filter);
+        UpdateDb();
     }
 
     public void reset() {
@@ -273,10 +279,84 @@ public class MainActivity extends AppCompatActivity
             e.printStackTrace();
         }
     }
-    public String getCurrentDateTime(String format) {
-        Calendar cal = Calendar.getInstance();
-        Date currentLocalTime = cal.getTime();
-        DateFormat date = new SimpleDateFormat(format);
-        return date.format(currentLocalTime);
+
+    public void UpdateDb() {
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    DatabaseHelper db = new DatabaseHelper(getApplicationContext());
+                    try {
+                        if (db.register_desync_count() >= 1)
+                            offlineRegisterSynchronizer();
+                        db.close();
+                        Thread.sleep(3000); // 5 Min = 300000
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                    db.close();
+                }
+            }
+        };
+        new Thread(runnable).start();
+    }
+
+    public void offlineRegisterSynchronizer() {
+        DatabaseHelper db = new DatabaseHelper(this);
+        List registers = db.get_desynchronized_registers();
+        db.close();
+
+        String[] arr;
+        JSONObject json = new JSONObject();
+
+        for (int i = 0; i <= registers.size() - 1; i++) {
+            arr = registers.get(i).toString().split(";");
+            try {
+                json.put("person", arr[1]);
+                json.put("date", arr[4]);
+                json.put("pda", arr[3]);
+                registerTask rt = new registerTask();
+                rt.execute(json);
+                json = null;
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public class registerTask extends AsyncTask<JSONObject,Void, String> {
+
+        @Override
+        protected String doInBackground(JSONObject... json) {
+            String resp;
+            try {
+
+                Http http = new Http();
+                String out = json[0].toString()+"";
+                resp = http.Post(baseUrl+"registers", out.toString()+"", "application/json; charset=utf-8");
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+            return resp;
+        }
+
+        @Override
+        protected void onPostExecute(String response) {
+            super.onPostExecute(response);
+
+            boolean updated = false;
+            if (response != null){
+                DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
+                try {
+                    JSONObject json = new JSONObject(response);
+                    updated = db.update_register(json.getLong("date"));
+                    Log.d("updated", String.valueOf(updated));
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 }

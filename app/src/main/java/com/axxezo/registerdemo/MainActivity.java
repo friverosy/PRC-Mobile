@@ -1,8 +1,17 @@
 package com.axxezo.registerdemo;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.device.ScanManager;
 import android.os.Bundle;
+import android.os.Vibrator;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
+import android.util.Log;
 import android.view.View;
 import android.support.design.widget.NavigationView;
 import android.support.v4.view.GravityCompat;
@@ -12,15 +21,28 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.EditText;
+import android.widget.TextView;
 
+import org.json.JSONException;
+import org.json.JSONObject;
 
-
-
-
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
 
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
+
+    //declaration
+    private TextView VERSION;
+    private EditText editText_dni;
+    private String barcodeStr;
+    private Vibrator mVibrator;
+    private ScanManager mScanManager;
+    private final static String SCAN_ACTION = "urovo.rcv.message";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -28,6 +50,11 @@ public class MainActivity extends AppCompatActivity
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+        //content views call
+        VERSION = (TextView) findViewById(R.id.version);
+        editText_dni = (EditText) findViewById(R.id.editText_dni);
+        mVibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -46,6 +73,9 @@ public class MainActivity extends AppCompatActivity
 
         NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
+
+        //put version application in textview;
+        VERSION.setText(getApplicationVersionString(this));
     }
 
     @Override
@@ -103,5 +133,150 @@ public class MainActivity extends AppCompatActivity
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
         return true;
+    }
+
+    private BroadcastReceiver mScanReceiver = new BroadcastReceiver() {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+
+            // TODO Auto-generated method stub
+            try {
+                DatabaseHelper db=DatabaseHelper.getInstance(getApplicationContext());
+                mVibrator.vibrate(100);
+                reset();
+                byte[] barcode = intent.getByteArrayExtra("barocode");
+                int barocodelen = intent.getIntExtra("length", 0);
+                byte barcodeType = intent.getByteExtra("barcodeType", (byte) 0);
+                barcodeStr = new String(barcode, 0, barocodelen);
+                String rawCode = barcodeStr;
+
+                if (barcodeType == 28) {
+                    if (barcodeStr.startsWith("https://")) { // Its a new DNI Cards.
+                        barcodeStr = barcodeStr.substring(
+                                barcodeStr.indexOf("RUN=") + 4,
+                                barcodeStr.indexOf("&type"));
+                        // Remove DV.
+                        barcodeStr = barcodeStr.substring(0, barcodeStr.indexOf("-") + 2);
+                        editText_dni.setText(barcodeStr.trim());
+                        db.insert("insert into records(person_document,datetime) values('"+barcodeStr.trim()+"','"+getCurrentDateTime("yyyy-MM-dd HH:mm:ss")+"')");
+
+                    } else
+                        editText_dni.setError("cedula o pasaporte incorrecto, verifique");
+
+                } else if (barcodeType == 17) { // PDF417->old dni // 1.- validate if the rut is > 10 millions
+                    //else old dni
+                    String rutValidator = barcodeStr.substring(0, 9);
+                    rutValidator = rutValidator.replace(" ", "");
+                    boolean isvalid = validateRut(rutValidator);
+                    if (isvalid) {
+                        barcodeStr = rutValidator;
+                        rutValidator = rutValidator.substring(0, rutValidator.length() - 1) + "-" + rutValidator.substring(rutValidator.length() - 1);
+                        editText_dni.setText(rutValidator);
+                        db.insert("insert into records(person_document,datetime) values('"+barcodeStr.trim()+"','"+getCurrentDateTime("yyyy-MM-dd HH:mm:ss")+"')");
+                    } else { //try validate rut size below 10.000.000
+                        rutValidator = barcodeStr.substring(0, 8);
+                        rutValidator = rutValidator.replace(" ", "");
+                        isvalid = validateRut(rutValidator);
+                        if (isvalid) {
+                            barcodeStr = rutValidator;
+                            rutValidator = rutValidator.substring(0, rutValidator.length() - 1) + "-" + rutValidator.substring(rutValidator.length() - 1);
+                            editText_dni.setText(rutValidator);
+                            db.insert("insert into records(person_document,datetime) values('"+rutValidator.trim()+"','"+getCurrentDateTime("yyyy-MM-dd HH:mm:ss")+"')");
+                        } else {
+                            // log.writeLog(getApplicationContext(), "Main:line 412", "ERROR", "rut invalido " + barcodeStr);
+                            barcodeStr = "";
+                            editText_dni.setError("cedula o pasaporte incorrecto, verifique");
+                        }
+                    }
+                }
+
+            } catch (NullPointerException e) {
+                e.printStackTrace();
+                //     log.writeLog(getApplicationContext(), "Main:line 408", "ERROR", e.getMessage());
+            } catch (Exception e) {
+                e.printStackTrace();
+                //     log.writeLog(getApplicationContext(), "Main:line 411", "ERROR", e.getMessage());
+            }
+        }
+    };
+
+    public static String getApplicationVersionString(Context context) {
+        try {
+            PackageManager pm = context.getPackageManager();
+            PackageInfo info = pm.getPackageInfo(context.getPackageName(), 0);
+            return "v" + info.versionName;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static boolean validateRut(String rut) {
+
+        boolean validacion = false;
+        try {
+            rut = rut.toUpperCase();
+            rut = rut.replace(".", "");
+            rut = rut.replace("-", "");
+            int rutAux = Integer.parseInt(rut.substring(0, rut.length() - 1));
+
+            char dv = rut.charAt(rut.length() - 1);
+
+            int m = 0, s = 1;
+            for (; rutAux != 0; rutAux /= 10) {
+                s = (s + rutAux % 10 * (9 - m++ % 6)) % 11;
+            }
+            if (dv == (char) (s != 0 ? s + 47 : 75)) {
+                validacion = true;
+            }
+
+        } catch (java.lang.NumberFormatException e) {
+
+        } catch (Exception e) {
+        }
+        return validacion;
+    }
+
+    private void initScan() {
+        // TODO Auto-generated method stub
+        mScanManager = new ScanManager();
+        mScanManager.openScanner();
+        mScanManager.switchOutputMode(0);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mScanManager != null) {
+            mScanManager.stopDecode();
+        }
+        unregisterReceiver(mScanReceiver);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        initScan();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(SCAN_ACTION);
+        registerReceiver(mScanReceiver, filter);
+    }
+
+    public void reset() {
+        try {
+            initScan();
+            IntentFilter filter = new IntentFilter();
+            filter.addAction(SCAN_ACTION);
+            registerReceiver(mScanReceiver, filter);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    public String getCurrentDateTime(String format) {
+        Calendar cal = Calendar.getInstance();
+        Date currentLocalTime = cal.getTime();
+        DateFormat date = new SimpleDateFormat(format);
+        return date.format(currentLocalTime);
     }
 }

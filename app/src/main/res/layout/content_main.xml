@@ -33,7 +33,7 @@
             android:textColor="@android:color/white"
             android:textColorHint="@android:color/white"
             android:textStyle="bold|italic"
-            android:id="@+id/editText"
+            android:id="@+id/editText_dni"
             android:layout_below="@+id/imageView_axxezo"
             android:layout_centerHorizontal="true"
             android:layout_marginTop="21dp" />
@@ -44,8 +44,19 @@
         android:id="@+id/recicleview"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_marginBottom="@dimen/activity_vertical_margin"
         android:background="@color/colortest1"
         android:layout_below="@id/layout_information">
     </android.support.v7.widget.RecyclerView>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center|bottom"
+        android:text="Version"
+        android:background="@color/colortest1"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentStart="true"
+        android:id="@+id/version" />
 
 </RelativeLayout>

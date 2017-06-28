@@ -44,10 +44,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String TABLE_PEOPLE = "PEOPLE";
     private static final String TABLE_REGISTERS = "REGISTERS";
 
-    //table structure
-    //login
-
-    //records
+    // Registers attributes
     private static final String REGISTER_ID = "id";
     private static final String REGISTER_DATE = "date";
     private static final String REGISTER_PDA = "pda";
@@ -55,8 +52,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String REGISTER_ALLOW = "allow";
     private static final String REGISTER_SYNC = "sync";
 
+    private static final String PEOPLE_DNI = "dni";
+    private static final String PEOPLE_NAME = "name";
 
     private static final String[] REGISTERS_COLUMNS = {REGISTER_ID, REGISTER_DATE, REGISTER_PERSON, REGISTER_PDA, REGISTER_ALLOW, REGISTER_SYNC};
+    private static final String[] PEOPLE_COLUMNS = {PEOPLE_DNI, PEOPLE_NAME};
 
     // Database Version
     private static final int DATABASE_VERSION = 1;
@@ -65,13 +65,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     // SQL statement to create the differents tables
 
-    private String CREATE_REGISTERS_TABLE = "CREATE TABLE IF NOT EXISTS " + TABLE_REGISTERS + " ( " +
+    private String CREATE_REGISTERS_TABLE = "CREATE TABLE IF NOT EXISTS " + TABLE_REGISTERS + " (" +
             REGISTER_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
             REGISTER_PERSON + " INTEGER, " +
             REGISTER_ALLOW + " INTEGER, " +
             REGISTER_PDA + " TEXT, " +
             REGISTER_DATE + " INTEGER, " +
             REGISTER_SYNC + " INTEGER); ";
+
+    private String CREATE_PEOPLE_TABLE = "CREATE TABLE IF NOT EXISTS " + TABLE_PEOPLE + " (" +
+            PEOPLE_DNI + " TEXT PRIMARY KEY, " +
+            PEOPLE_NAME + " TEXT)";
 
     public DatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -86,13 +90,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public void onCreate(SQLiteDatabase db) {
         //first create the tables
         db.execSQL(CREATE_REGISTERS_TABLE);
+        db.execSQL(CREATE_PEOPLE_TABLE);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // Drop older tables if it existed
-        db.execSQL("DROP TABLE IF EXISTS " + TABLE_PEOPLE);
-        //create fresh tables
         this.onCreate(db);
     }
 
@@ -202,7 +204,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         // 3. get all
         cursor.moveToFirst();
-        //List<Register> registers = new ArrayList<>();
         Register[] registers = new Register[cursor.getCount()];
         for(int i = 0; i < registers.length; i++) {
             Register register = new Register();
@@ -215,21 +216,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             registers[i] = register;
             register = null;
         }
-//        Register register = new Register();
-
-//        while (cursor.isAfterLast() == false) {
-//
-//            register.setId(cursor.getInt(cursor.getColumnIndex(REGISTER_ID)));
-//            register.setPerson(cursor.getString(cursor.getColumnIndex(REGISTER_PERSON)));
-//            register.setAllow(cursor.getInt(cursor.getColumnIndex(REGISTER_ALLOW)));
-//            register.setPda(cursor.getString(cursor.getColumnIndex(REGISTER_PDA)));
-//            register.setDate(cursor.getLong(cursor.getColumnIndex(REGISTER_DATE)));
-//            register.setSync(cursor.getInt(cursor.getColumnIndex(REGISTER_SYNC)));
-//            registers.add(register);
-//            cursor.moveToNext();
-//            register = null;
-//        }
-
         cursor.close();
         return registers;
     }
@@ -244,6 +230,56 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         } catch (SQLException e) {
             e.printStackTrace();
             return 0;
+        }
+    }
+
+    public People[] getUnamedPeople() {
+        // 1. get reference to readable DB
+        SQLiteDatabase db = this.getReadableDatabase();
+
+        // 2. build query
+        Cursor cursor =
+                db.query(TABLE_PEOPLE, // a. table
+                        PEOPLE_COLUMNS, // b. column names
+                        PEOPLE_NAME + " is null", // c. selections
+                        null, // d. selections args
+                        null, // e. group by
+                        null, // f. having
+                        null, // g. order by
+                        null); // h. limit
+
+        // 3. get all
+        cursor.moveToFirst();
+        People[] people = new People[cursor.getCount()];
+        for(int i = 0; i < people.length; i++) {
+            People person = new People(
+                    cursor.getString(cursor.getColumnIndex(PEOPLE_DNI)),
+                    cursor.getString(cursor.getColumnIndex(PEOPLE_NAME))
+            );
+            people[i] = person;
+            person = null;
+        }
+
+        cursor.close();
+        return people;
+    }
+
+    public void setName(String dni, String name) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        try {
+            db.beginTransactionNonExclusive();
+            values.put(PEOPLE_NAME, name);
+            db.update(TABLE_PEOPLE,
+                    values,
+                    PEOPLE_DNI + " = '" + dni + "'",
+                    null
+            );
+            db.setTransactionSuccessful();
+        } catch (android.database.SQLException e) {
+            e.printStackTrace();
+        } finally {
+            db.endTransaction();
         }
     }
 }

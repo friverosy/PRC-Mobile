@@ -163,7 +163,8 @@ public class MainActivity extends AppCompatActivity
                         // Remove DV.
                         barcodeStr = barcodeStr.substring(0, barcodeStr.indexOf("-") + 2);
                         editText_dni.setText(barcodeStr.trim());
-                        db.insert("insert into registers (person, date, pda, sync) values ('"+barcodeStr.trim()+"',"+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
+                        db.insert("insert into registers (person, date, pda, sync) values ('"+barcodeStr.trim()+"', "+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
+                        db.insert("insert OR IGNORE into people (dni) values ('"+barcodeStr.trim()+"')");
 
                     } else
                         editText_dni.setError("cedula o pasaporte incorrecto, verifique");
@@ -177,7 +178,8 @@ public class MainActivity extends AppCompatActivity
                         barcodeStr = rutValidator;
                         rutValidator = rutValidator.substring(0, rutValidator.length() - 1) + "-" + rutValidator.substring(rutValidator.length() - 1);
                         editText_dni.setText(rutValidator);
-                        db.insert("insert into registers (person, date, pda, sync) values ('"+barcodeStr.trim()+"',"+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
+                        db.insert("insert into registers (person, date, pda, sync) values ('"+barcodeStr.trim()+"', "+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
+                        db.insert("insert OR IGNORE into people (dni) values ('"+barcodeStr.trim()+"')");
                     } else { //try validate rut size below 10.000.000
                         rutValidator = barcodeStr.substring(0, 8);
                         rutValidator = rutValidator.replace(" ", "");
@@ -186,7 +188,8 @@ public class MainActivity extends AppCompatActivity
                             barcodeStr = rutValidator;
                             rutValidator = rutValidator.substring(0, rutValidator.length() - 1) + "-" + rutValidator.substring(rutValidator.length() - 1);
                             editText_dni.setText(rutValidator);
-                            db.insert("insert into registers (person, date, pda, sync) values ('"+rutValidator.trim()+"',"+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
+                            db.insert("insert into registers (person, date, pda, sync) values ('"+rutValidator.trim()+"', "+new Date().getTime()+", '"+Build.SERIAL+"', 0)");
+                            db.insert("insert OR IGNORE into people (dni) values ('"+rutValidator.trim()+"')");
                         } else {
                             // log.writeLog(getApplicationContext(), "Main:line 412", "ERROR", "rut invalido " + barcodeStr);
                             barcodeStr = "";
@@ -287,8 +290,8 @@ public class MainActivity extends AppCompatActivity
                 while (true) {
                     DatabaseHelper db = new DatabaseHelper(getApplicationContext());
                     try {
-                        if (db.register_desync_count() >= 1)
-                            offlineRegisterSynchronizer();
+                        if (db.register_desync_count() >= 1) offlineRegisterSynchronizer();
+                        getPeopleName();
                         db.close();
                         Thread.sleep(3000); // 5 Min = 300000
                     } catch (Exception e) {
@@ -299,6 +302,23 @@ public class MainActivity extends AppCompatActivity
             }
         };
         new Thread(runnable).start();
+    }
+
+    public void getPeopleName() {
+        DatabaseHelper db = new DatabaseHelper(this);
+        People[] people = db.getUnamedPeople();
+        db.close();
+
+        JSONObject json = new JSONObject();
+        for (int i = 0; i <= people.length-1; i++) {
+            try {
+                json.put("dni", people[i].getDNI());
+                Log.d("json to get", json.toString());
+                new getNameTask().execute(json);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void offlineRegisterSynchronizer() {
@@ -312,8 +332,7 @@ public class MainActivity extends AppCompatActivity
                 json.put("person", registers[i].person);
                 json.put("date", registers[i].date);
                 json.put("pda", registers[i].pda);
-                registerTask rt = new registerTask();
-                rt.execute(json);
+                new registerTask().execute(json);
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -329,7 +348,7 @@ public class MainActivity extends AppCompatActivity
 
                 Http http = new Http();
                 String out = json[0].toString()+"";
-                resp = http.Post(baseUrl+"registers", out.toString()+"", "application/json; charset=utf-8");
+                resp = http.Post(baseUrl + "registers", out.toString()+ "", "application/json; charset=utf-8");
 
             } catch (Exception e) {
                 e.printStackTrace();
@@ -349,6 +368,41 @@ public class MainActivity extends AppCompatActivity
                     JSONObject json = new JSONObject(response);
                     updated = db.update_register(json.getLong("date"));
                     // Use updated var to display if is updated or not like WhatsApp.
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    public class getNameTask extends AsyncTask<JSONObject,Void, String> {
+
+        @Override
+        protected String doInBackground(JSONObject... json) {
+            String resp;
+            Log.d("json receive", json[0].toString());
+            try {
+                Http http = new Http();
+                String out = json[0].toString()+"";
+                Log.d("out", out);
+                resp = http.Get(baseUrl + "people/getName");
+                Log.d("get response", resp);
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+            return resp;
+        }
+
+        @Override
+        protected void onPostExecute(String response) {
+            super.onPostExecute(response);
+            Log.d("response on post", response);
+            if (response != null){
+                DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
+                try {
+                    JSONObject json = new JSONObject(response);
+                    db.setName(json.getString("dni"), json.getString("name"));
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }

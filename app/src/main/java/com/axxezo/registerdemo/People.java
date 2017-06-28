@@ -6,13 +6,11 @@ package com.axxezo.registerdemo;
 
 public class People {
     private String DNI;
-    private String name;
-    private String datetime;
+    private String NAME;
 
-    public People(String DNI, String name, String datetime) {
+    public People(String DNI, String NAME) {
         this.DNI = DNI;
-        this.name = name;
-        this.datetime = datetime;
+        this.NAME = NAME;
     }
 
     public String getDNI() {
@@ -23,19 +21,11 @@ public class People {
         this.DNI = DNI;
     }
 
-    public String getName() {
-        return name;
+    public String getNAME() {
+        return NAME;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getDatetime() {
-        return datetime;
-    }
-
-    public void setDatetime(String datetime) {
-        this.datetime = datetime;
+    public void setNAME(String NAME) {
+        this.NAME = NAME;
     }
 }

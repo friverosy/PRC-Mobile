@@ -184,7 +184,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     }
 
-    public List get_desynchronized_registers() {
+    public Register[] get_desynchronized_registers() {
 
         // 1. get reference to readable DB
         SQLiteDatabase db = this.getReadableDatabase();
@@ -193,31 +193,45 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Cursor cursor =
                 db.query(TABLE_REGISTERS, // a. table
                         REGISTERS_COLUMNS, // b. column names
-                        REGISTER_SYNC + "=0", // c. selections
+                        REGISTER_SYNC + " = 0", // c. selections
                         null, // d. selections args
                         null, // e. group by
                         null, // f. having
-                        null, // g. order by
+                        REGISTER_DATE + " ASC", // g. order by
                         null); // h. limit
 
         // 3. get all
         cursor.moveToFirst();
-        List<String> records = new ArrayList<>();
-
-        while (cursor.isAfterLast() == false) {
-            records.add(
-                    cursor.getInt(0) + ";" + //ID
-                            cursor.getString(cursor.getColumnIndex(REGISTER_PERSON)) + ";" + //PERSON
-                            cursor.getInt(cursor.getColumnIndex(REGISTER_ALLOW)) + ";" + //ALLOW
-                            cursor.getString(cursor.getColumnIndex(REGISTER_PDA)) + ";" + //PDA
-                            cursor.getLong(cursor.getColumnIndex(REGISTER_DATE)) + ";" + //DATETIME
-                            cursor.getInt(cursor.getColumnIndex(REGISTER_SYNC)) + ";" //SYNC
-            );
-            cursor.moveToNext();
+        //List<Register> registers = new ArrayList<>();
+        Register[] registers = new Register[cursor.getCount()];
+        for(int i = 0; i < registers.length; i++) {
+            Register register = new Register();
+            register.setId(cursor.getInt(cursor.getColumnIndex(REGISTER_ID)));
+            register.setPerson(cursor.getString(cursor.getColumnIndex(REGISTER_PERSON)));
+            register.setAllow(cursor.getInt(cursor.getColumnIndex(REGISTER_ALLOW)));
+            register.setPda(cursor.getString(cursor.getColumnIndex(REGISTER_PDA)));
+            register.setDate(cursor.getLong(cursor.getColumnIndex(REGISTER_DATE)));
+            register.setSync(cursor.getInt(cursor.getColumnIndex(REGISTER_SYNC)));
+            registers[i] = register;
+            register = null;
         }
+//        Register register = new Register();
+
+//        while (cursor.isAfterLast() == false) {
+//
+//            register.setId(cursor.getInt(cursor.getColumnIndex(REGISTER_ID)));
+//            register.setPerson(cursor.getString(cursor.getColumnIndex(REGISTER_PERSON)));
+//            register.setAllow(cursor.getInt(cursor.getColumnIndex(REGISTER_ALLOW)));
+//            register.setPda(cursor.getString(cursor.getColumnIndex(REGISTER_PDA)));
+//            register.setDate(cursor.getLong(cursor.getColumnIndex(REGISTER_DATE)));
+//            register.setSync(cursor.getInt(cursor.getColumnIndex(REGISTER_SYNC)));
+//            registers.add(register);
+//            cursor.moveToNext();
+//            register = null;
+//        }
 
         cursor.close();
-        return records;
+        return registers;
     }
 
     public int register_desync_count() {

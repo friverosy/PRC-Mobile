@@ -46,7 +46,7 @@ public class MainActivity extends AppCompatActivity
     private Vibrator mVibrator;
     private ScanManager mScanManager;
     private final static String SCAN_ACTION = "urovo.rcv.message";
-    private final static String baseUrl = "http://192.168.1.108:3000/api/";
+    private final static String baseUrl = "http://192.168.1.115:3000/api/";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -303,21 +303,17 @@ public class MainActivity extends AppCompatActivity
 
     public void offlineRegisterSynchronizer() {
         DatabaseHelper db = new DatabaseHelper(this);
-        List registers = db.get_desynchronized_registers();
+        Register[] registers = db.get_desynchronized_registers();
         db.close();
 
-        String[] arr;
         JSONObject json = new JSONObject();
-
-        for (int i = 0; i <= registers.size() - 1; i++) {
-            arr = registers.get(i).toString().split(";");
+        for (int i = 0; i <= registers.length-1; i++) {
             try {
-                json.put("person", arr[1]);
-                json.put("date", arr[4]);
-                json.put("pda", arr[3]);
+                json.put("person", registers[i].person);
+                json.put("date", registers[i].date);
+                json.put("pda", registers[i].pda);
                 registerTask rt = new registerTask();
                 rt.execute(json);
-                json = null;
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -352,7 +348,7 @@ public class MainActivity extends AppCompatActivity
                 try {
                     JSONObject json = new JSONObject(response);
                     updated = db.update_register(json.getLong("date"));
-                    Log.d("updated", String.valueOf(updated));
+                    // Use updated var to display if is updated or not like WhatsApp.
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }

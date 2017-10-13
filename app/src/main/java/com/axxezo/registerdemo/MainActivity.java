@@ -12,28 +12,24 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
-import android.util.Log;
-import android.view.View;
 import android.support.design.widget.NavigationView;
+import android.support.design.widget.Snackbar;
 import android.support.v4.view.GravityCompat;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
 import java.util.Date;
-import java.util.List;
 
 
 public class MainActivity extends AppCompatActivity
@@ -46,7 +42,9 @@ public class MainActivity extends AppCompatActivity
     private Vibrator mVibrator;
     private ScanManager mScanManager;
     private final static String SCAN_ACTION = "urovo.rcv.message";
-    private final static String baseUrl = "http://192.168.1.115:3000/api/";
+    private final static String baseUrl = "http://192.168.1.102:3000/api/";
+    private String pointId;
+    private String pdaId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -80,6 +78,9 @@ public class MainActivity extends AppCompatActivity
 
         //put version application in textview;
         VERSION.setText(getApplicationVersionString(this));
+
+        // Get initial setup
+        new getSetupTask().execute();
     }
 
     @Override
@@ -198,15 +199,37 @@ public class MainActivity extends AppCompatActivity
                     }
                 }
 
-            } catch (NullPointerException e) {
-                e.printStackTrace();
-                //     log.writeLog(getApplicationContext(), "Main:line 408", "ERROR", e.getMessage());
             } catch (Exception e) {
                 e.printStackTrace();
                 //     log.writeLog(getApplicationContext(), "Main:line 411", "ERROR", e.getMessage());
             }
         }
     };
+
+    public class getSetupTask extends AsyncTask<String, String, String> {
+
+        String url = baseUrl + "pdas/findOne?filter=";
+
+        @Override
+        protected String doInBackground(String... params) {
+            JSONObject jsonObject = new JSONObject();
+            String resp = null;
+            try {
+                jsonObject.accumulate("serial", Build.SERIAL);
+                Http http = new Http();
+                resp = http.Get(url + jsonObject.toString());
+                JSONObject response = new JSONObject(resp);
+                Log.d("---response-->", resp);
+                pointId = response.getString("pointId");
+                pdaId = response.getString("id");
+            }catch (JSONException e) {
+                e.printStackTrace();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return resp;
+        }
+    }
 
     public static String getApplicationVersionString(Context context) {
         try {
@@ -291,7 +314,7 @@ public class MainActivity extends AppCompatActivity
                     DatabaseHelper db = new DatabaseHelper(getApplicationContext());
                     try {
                         if (db.register_desync_count() >= 1) offlineRegisterSynchronizer();
-                        getPeopleName();
+                        //getPeopleName();
                         db.close();
                         Thread.sleep(3000); // 5 Min = 300000
                     } catch (Exception e) {
@@ -313,7 +336,7 @@ public class MainActivity extends AppCompatActivity
         for (int i = 0; i <= people.length-1; i++) {
             try {
                 json.put("dni", people[i].getDNI());
-                Log.d("json to get", json.toString());
+                //Log.d("json to get", json.toString());
                 new getNameTask().execute(json);
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -329,9 +352,11 @@ public class MainActivity extends AppCompatActivity
         JSONObject json = new JSONObject();
         for (int i = 0; i <= registers.length-1; i++) {
             try {
-                json.put("person", registers[i].person);
-                json.put("date", registers[i].date);
-                json.put("pda", registers[i].pda);
+                json.put("dni", registers[i].person);
+                //json.put("dni", "9402572-9");
+                json.put("time", registers[i].date);
+                json.put("pointId", pointId);
+                json.put("pdaId", pdaId);
                 new registerTask().execute(json);
             } catch (JSONException e) {
                 e.printStackTrace();
@@ -345,11 +370,9 @@ public class MainActivity extends AppCompatActivity
         protected String doInBackground(JSONObject... json) {
             String resp;
             try {
-
                 Http http = new Http();
                 String out = json[0].toString()+"";
-                resp = http.Post(baseUrl + "registers", out.toString()+ "", "application/json; charset=utf-8");
-
+                resp = http.Post(baseUrl + "registers", out.toString() + "", "application/json; charset=utf-8");
             } catch (Exception e) {
                 e.printStackTrace();
                 return null;
@@ -360,13 +383,12 @@ public class MainActivity extends AppCompatActivity
         @Override
         protected void onPostExecute(String response) {
             super.onPostExecute(response);
-
             boolean updated = false;
             if (response != null){
                 DatabaseHelper db = DatabaseHelper.getInstance(getApplicationContext());
                 try {
                     JSONObject json = new JSONObject(response);
-                    updated = db.update_register(json.getLong("date"));
+                    updated = db.update_register(json.getString("dni"),json.getLong("time"));
                     // Use updated var to display if is updated or not like WhatsApp.
                 } catch (JSONException e) {
                     e.printStackTrace();

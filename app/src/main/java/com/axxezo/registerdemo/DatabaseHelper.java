@@ -133,7 +133,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return texto;
     }
 
-    public boolean update_register(long date) {
+    public boolean update_register(String dni, long date) {
         //log_app log = new log_app();
         SQLiteDatabase db = this.getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -144,12 +144,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             // 3. updating row
             i = db.update(TABLE_REGISTERS, //table
                     values, // column/value
-                    REGISTER_DATE + "=" + date, // where
+                    REGISTER_DATE + "=" + date + " and " + REGISTER_PERSON + "='" + dni + "'", // where
                     null);
             db.setTransactionSuccessful();
         } catch (android.database.SQLException e) {
             e.printStackTrace();
-          //  log.writeLog(context, "DBHelper", "ERROR", e.getMessage());
         } finally {
             // 4. close
             db.endTransaction();
